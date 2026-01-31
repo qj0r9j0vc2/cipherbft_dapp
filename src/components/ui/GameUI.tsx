@@ -193,9 +193,9 @@ export function MobileControls() {
         <div />
         <button className={buttonClass} onClick={() => movePlayer('forward')}>↑</button>
         <div />
-        <button className={buttonClass} onClick={() => movePlayer('left')}>←</button>
+        <button className={buttonClass} onClick={() => movePlayer('right')}>←</button>
         <button className={buttonClass} onClick={() => movePlayer('back')}>↓</button>
-        <button className={buttonClass} onClick={() => movePlayer('right')}>→</button>
+        <button className={buttonClass} onClick={() => movePlayer('left')}>→</button>
       </div>
     </div>
   )
