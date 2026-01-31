@@ -1,15 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { keccak256, toHex } from 'viem'
 import { useGameStore } from '@/store/gameStore'
-import {
-  GAME_CONTRACT_ADDRESS,
-  GAME_CONTRACT_ABI,
-  publicClient,
-  walletClient,
-  account
-} from '@/lib/wagmi'
 
 interface TxMetrics {
   pendingCount: number
@@ -18,9 +11,13 @@ interface TxMetrics {
   tps: number
 }
 
-// Global nonce manager - 완전 비동기
-let currentNonce: number | null = null
-let nonceInitialized = false
+interface ConnectionStatus {
+  connected: boolean
+  address?: string
+  chainId?: number
+  blockNumber?: string
+  error?: string
+}
 
 export function useBlockchain() {
   const { addTx, confirmTx } = useGameStore()
@@ -35,17 +32,23 @@ export function useBlockchain() {
   const [txTimes, setTxTimes] = useState<number[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const [mockMode, setMockMode] = useState(true)
+  const [serverAddress, setServerAddress] = useState<string>('')
+  const [chainId, setChainId] = useState<number>(85300)
 
-  // 블록체인 연결 확인 및 nonce 초기화
+  // Check server connection status
   useEffect(() => {
-    publicClient.getBlockNumber()
-      .then(async () => {
-        if (!nonceInitialized) {
-          currentNonce = await publicClient.getTransactionCount({ address: account.address })
-          nonceInitialized = true
+    fetch('/api/tx')
+      .then(res => res.json())
+      .then((data: ConnectionStatus) => {
+        if (data.connected) {
+          setIsConnected(true)
+          setMockMode(false)
+          setServerAddress(data.address || '')
+          setChainId(data.chainId || 85300)
+        } else {
+          setIsConnected(false)
+          setMockMode(true)
         }
-        setIsConnected(true)
-        setMockMode(false)
       })
       .catch(() => {
         setIsConnected(false)
@@ -53,7 +56,7 @@ export function useBlockchain() {
       })
   }, [])
 
-  // 메트릭 업데이트 (백그라운드)
+  // Update metrics after transaction confirmation
   const updateMetrics = useCallback((startTime: number, txHash: string) => {
     const endTime = Date.now()
     const actualTime = endTime - startTime
@@ -77,7 +80,7 @@ export function useBlockchain() {
     })
   }, [confirmTx])
 
-  // Mock 트랜잭션 (블록체인 미연결 시)
+  // Mock transaction for when blockchain is not connected
   const simulateTx = useCallback((type: string, data: Record<string, unknown>) => {
     const txHash = keccak256(toHex(`${Date.now()}-${Math.random()}-${JSON.stringify(data)}`))
     const startTime = Date.now()
@@ -97,20 +100,17 @@ export function useBlockchain() {
     }, 10 + Math.random() * 40)
   }, [addTx, updateMetrics])
 
-  // 🔥 Fire-and-forget 트랜잭션 (게임 블로킹 없음)
+  // Fire-and-forget transaction via server API
   const fireTransaction = useCallback((
-    functionName: 'startGame' | 'recordMove' | 'endGame',
-    args: unknown[],
+    action: 'startGame' | 'recordMove' | 'endGame',
+    params: Record<string, unknown>,
     type: 'move' | 'score' | 'death',
     data: Record<string, unknown>
   ) => {
-    if (currentNonce === null) return
-
-    const nonce = currentNonce++
     const startTime = Date.now()
-    const tempHash = keccak256(toHex(`pending-${nonce}-${Date.now()}`))
+    const tempHash = keccak256(toHex(`pending-${Date.now()}-${Math.random()}`))
 
-    // UI 즉시 업데이트
+    // Immediate UI update
     addTx({
       hash: tempHash,
       type,
@@ -120,37 +120,37 @@ export function useBlockchain() {
     })
     setMetrics(prev => ({ ...prev, pendingCount: prev.pendingCount + 1 }))
 
-    // 백그라운드에서 트랜잭션 전송
-    walletClient.writeContract({
-      address: GAME_CONTRACT_ADDRESS,
-      abi: GAME_CONTRACT_ABI,
-      functionName,
-      nonce,
-      args: args as never
+    // Send transaction via server API (fire-and-forget)
+    fetch('/api/tx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, params })
     })
-      .then(txHash => {
-        // 트랜잭션 전송 완료, confirmation 대기
-        publicClient.waitForTransactionReceipt({ hash: txHash })
-          .then(() => updateMetrics(startTime, tempHash))
-          .catch(console.error)
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          updateMetrics(startTime, tempHash)
+        } else {
+          console.error('Transaction failed:', result.error)
+          setMetrics(prev => ({ ...prev, pendingCount: Math.max(0, prev.pendingCount - 1) }))
+        }
       })
       .catch(err => {
-        console.error(`${functionName} failed:`, err)
-        // 실패 시 pending 카운트 감소
+        console.error('Transaction error:', err)
         setMetrics(prev => ({ ...prev, pendingCount: Math.max(0, prev.pendingCount - 1) }))
       })
   }, [addTx, updateMetrics])
 
-  // 게임 시작 기록
+  // Game start
   const startGame = useCallback(() => {
     if (mockMode) {
       simulateTx('score', { action: 'start' })
     } else {
-      fireTransaction('startGame', [], 'score', { action: 'start' })
+      fireTransaction('startGame', {}, 'score', { action: 'start' })
     }
   }, [mockMode, simulateTx, fireTransaction])
 
-  // 이동 기록 (완전 비동기 - 게임 안 멈춤)
+  // Record move (fully async - no game blocking)
   const recordMove = useCallback((direction: string, position: { x: number; z: number }) => {
     if (mockMode) {
       simulateTx('move', { direction, ...position })
@@ -158,30 +158,30 @@ export function useBlockchain() {
       const directionMap: Record<string, number> = { forward: 0, back: 1, left: 2, right: 3 }
       fireTransaction(
         'recordMove',
-        [
-          directionMap[direction] || 0,
-          BigInt(Math.floor(Math.abs(position.x) * 1000)),
-          BigInt(Math.floor(Math.abs(position.z) * 1000))
-        ],
+        {
+          direction: directionMap[direction] || 0,
+          x: Math.floor(Math.abs(position.x) * 1000).toString(),
+          z: Math.floor(Math.abs(position.z) * 1000).toString()
+        },
         'move',
         { direction, ...position }
       )
     }
   }, [mockMode, simulateTx, fireTransaction])
 
-  // 게임 종료 기록
+  // End game
   const endGame = useCallback((score: number) => {
     if (mockMode) {
       simulateTx('death', { score })
     } else {
-      fireTransaction('endGame', [BigInt(score)], 'death', { score })
+      fireTransaction('endGame', { score: score.toString() }, 'death', { score })
     }
   }, [mockMode, simulateTx, fireTransaction])
 
   return {
     isConnected,
-    address: account.address,
-    chainId: 85300,
+    address: serverAddress,
+    chainId,
     mockMode,
     metrics,
     recordMove,

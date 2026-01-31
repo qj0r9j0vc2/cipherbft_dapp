@@ -1,16 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const RPC_URL = 'https://rpc.cipherbft.xyz/'
+// Server-side only: reads from environment variable
+const RPC_URL = process.env.RPC_URL || 'http://localhost:8545'
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
+  try {
+    const body = await request.json()
 
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+    const res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
 
-  const data = await res.json()
-  return NextResponse.json(data)
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: 'RPC request failed', status: res.status },
+        { status: res.status }
+      )
+    }
+
+    const data = await res.json()
+    return NextResponse.json(data)
+  } catch (error) {
+    console.error('RPC proxy error:', error)
+    return NextResponse.json(
+      { error: 'Failed to connect to RPC node' },
+      { status: 503 }
+    )
+  }
 }
