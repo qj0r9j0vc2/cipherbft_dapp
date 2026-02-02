@@ -317,28 +317,18 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
     } else if (lane.type === 'river') {
-      // Find the closest log
-      let closestLog = null
-      let closestDist = Infinity
-
+      // Check train collision - hit by train = death
       for (const obs of lane.obstacles) {
         if (obs.type === 'log') {
-          const dist = Math.abs(playerPosition.x - obs.x)
-          if (dist < closestDist) {
-            closestDist = dist
-            closestLog = obs
+          const halfWidth = obs.width / 2
+          if (
+            playerPosition.x > obs.x - halfWidth - 0.3 &&
+            playerPosition.x < obs.x + halfWidth + 0.3
+          ) {
+            return true
           }
         }
       }
-
-      // If there's a log within reasonable range, snap player to it
-      if (closestLog && closestDist < closestLog.width / 2 + 1) {
-        // Player is on or near a log - safe
-        return false
-      }
-
-      // No log nearby - player drowns
-      return true
     }
 
     return false

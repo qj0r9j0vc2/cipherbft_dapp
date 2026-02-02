@@ -19,9 +19,10 @@ export function TxMetrics() {
   const { txHistory } = useGameStore()
 
   const recentTx = txHistory.slice(-5).reverse()
+  const latestTx = recentTx[0]
 
   return (
-    <div className="absolute top-4 right-4 bg-black/70 text-white px-4 py-3 rounded-lg font-mono text-sm w-72">
+    <div className="absolute top-4 right-4 bg-black/70 text-white px-4 py-3 rounded-lg font-mono text-sm w-72 max-md:w-auto max-md:left-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-cyan-400 font-bold">Chain Status</span>
         <span className={`px-2 py-0.5 rounded text-xs ${mockMode ? 'bg-yellow-600' : 'bg-green-600'}`}>
@@ -51,10 +52,12 @@ export function TxMetrics() {
         <span>Confirmed: <span className="text-green-400">{metrics.confirmedCount}</span></span>
       </div>
 
-      {/* Recent transactions */}
+      {/* Recent transactions - full list on desktop, latest one on mobile */}
       <div className="border-t border-white/20 pt-2 mt-2">
         <div className="text-xs text-gray-400 mb-1">Recent Transactions</div>
-        <div className="space-y-1 max-h-32 overflow-y-auto">
+
+        {/* Desktop: show full list */}
+        <div className="hidden md:block space-y-1 max-h-32 overflow-y-auto">
           {recentTx.length === 0 ? (
             <div className="text-xs text-gray-500">No transactions yet</div>
           ) : (
@@ -77,6 +80,28 @@ export function TxMetrics() {
                 </span>
               </div>
             ))
+          )}
+        </div>
+
+        {/* Mobile: show only latest tx */}
+        <div className="md:hidden">
+          {!latestTx ? (
+            <div className="text-xs text-gray-500">No transactions yet</div>
+          ) : (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400 truncate w-20">
+                {latestTx.hash.slice(0, 10)}...
+              </span>
+              <span className={`px-1.5 py-0.5 rounded ${
+                latestTx.type === 'move' ? 'bg-blue-600' :
+                latestTx.type === 'score' ? 'bg-green-600' : 'bg-red-600'
+              }`}>
+                {latestTx.type}
+              </span>
+              <span className={latestTx.confirmed ? 'text-green-400' : 'text-yellow-400'}>
+                {latestTx.confirmed ? '✓' : '⏳'}
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -175,27 +200,6 @@ export function GameOverScreen() {
         >
           PLAY AGAIN
         </button>
-      </div>
-    </div>
-  )
-}
-
-export function MobileControls() {
-  const { isPlaying, movePlayer } = useGameStore()
-
-  if (!isPlaying) return null
-
-  const buttonClass = "w-16 h-16 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center text-2xl active:bg-white/40 transition-colors"
-
-  return (
-    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 md:hidden">
-      <div className="grid grid-cols-3 gap-2">
-        <div />
-        <button className={buttonClass} onClick={() => movePlayer('forward')}>↑</button>
-        <div />
-        <button className={buttonClass} onClick={() => movePlayer('right')}>←</button>
-        <button className={buttonClass} onClick={() => movePlayer('back')}>↓</button>
-        <button className={buttonClass} onClick={() => movePlayer('left')}>→</button>
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useGameStore } from '@/store/gameStore'
 import { useBlockchain } from '@/hooks/useBlockchain'
-import { ScoreBoard, TxMetrics, StartScreen, GameOverScreen, MobileControls } from '@/components/ui/GameUI'
+import { ScoreBoard, TxMetrics, StartScreen, GameOverScreen } from '@/components/ui/GameUI'
 
 // Dynamic import for Three.js to avoid SSR issues
 const Game = dynamic(
@@ -58,7 +58,6 @@ export default function Home() {
         <>
           <ScoreBoard />
           <TxMetrics />
-          <MobileControls />
         </>
       )}
 
