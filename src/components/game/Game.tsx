@@ -1,15 +1,21 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
+import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrthographicCamera } from '@react-three/drei'
 import { useGameStore } from '@/store/gameStore'
+import { useTouchControls } from '@/hooks/useTouchControls'
 import { Character } from './Character'
 import { World } from './World'
 
 function GameCamera() {
   const { camera } = useThree()
   const { playerPosition } = useGameStore()
+  const { size } = useThree()
+
+  // Adjust zoom based on viewport width — smaller screen = zoom out more
+  const zoom = Math.max(35, Math.min(70, size.width / 14))
 
   useFrame(() => {
     // Camera behind and below player, looking forward (up the screen)
@@ -22,13 +28,20 @@ function GameCamera() {
 
     // Look at a point ahead of the player
     camera.lookAt(playerPosition.x, 0, playerPosition.z + 5)
+
+    // Smoothly update zoom
+    if ('zoom' in camera) {
+      const orthoCamera = camera as THREE.OrthographicCamera
+      orthoCamera.zoom += (zoom - orthoCamera.zoom) * 0.1
+      orthoCamera.updateProjectionMatrix()
+    }
   })
 
   return (
     <OrthographicCamera
       makeDefault
       position={[-6, 10, -6]}
-      zoom={70}
+      zoom={zoom}
       near={0.1}
       far={1000}
     />
@@ -147,6 +160,13 @@ export function Game({ onMove }: GameProps) {
       onMove?.(direction, playerPosition)
     }
   }, [isPlaying, movePlayer, playerPosition, onMove])
+
+  const handleTouch = useCallback((direction: 'forward' | 'back' | 'left' | 'right') => {
+    movePlayer(direction)
+    onMove?.(direction, playerPosition)
+  }, [movePlayer, playerPosition, onMove])
+
+  useTouchControls(handleTouch, isPlaying)
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
